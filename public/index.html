@@ -689,7 +689,7 @@
           var videoStyle = img.video && img.ar ? ' style="aspect-ratio:' + img.ar + '"' : '';
           var mediaHtml = img.video ?
             '<video poster="' + img.poster + '" controls preload="metadata" playsinline' + videoStyle + '>' +
-              <source src="' + img.src + '" type="video/mp4">' +
+              '<source src="' + img.src + '" type="video/mp4">' +
               (img.srcWebm ? '<source src="' + img.srcWebm + '" type="video/webm">' : '') +
             '</video>' :
             '<img src="' + img.src + '" alt="" loading="lazy">';
