@@ -1,0 +1,959 @@
+<title>Oh Hojin</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@100;300;600&display=swap">
+<style>
+  *{box-sizing:border-box;}
+  :root{
+    --ink:#AFD2E6;
+    --ink-rgb:175,210,230;
+    --panel-bg:#B9D5E6;
+  }
+  html,body{height:100%;margin:0;overflow:hidden;background:#000;}
+  canvas{position:fixed;inset:0;z-index:1;display:block;pointer-events:none;}
+  .hit{
+    position:fixed;inset:0;z-index:2;border:0;background:transparent;
+    padding:0;cursor:pointer;touch-action:manipulation;
+  }
+  .hit:focus-visible{outline:2px solid rgba(var(--ink-rgb),.4);outline-offset:-6px;}
+  .power{
+    position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+    width:56px;height:56px;border-radius:50%;
+    border:1.5px solid var(--ink);
+    background:transparent;
+    display:flex;align-items:center;justify-content:center;
+    color:var(--ink);cursor:pointer;z-index:3;
+    opacity:0;pointer-events:none;
+    transition:opacity .7s ease, transform .3s ease;
+  }
+  .power.show{opacity:1;pointer-events:auto;}
+  .power:hover{transform:translate(-50%,-50%) scale(1.05);}
+  .power svg{width:17px;height:17px;}
+  /* the project list — back to sitting directly over the black hero
+     (a plain fade, no wipe), same as before the panel experiment. */
+  .projects{
+    position:fixed;inset:0;z-index:4;display:flex;flex-direction:column;align-items:center;
+    opacity:0;pointer-events:none;transition:opacity .8s ease;
+    overflow-y:auto;-webkit-overflow-scrolling:touch;
+  }
+  .projects.show{opacity:1;pointer-events:auto;}
+  .projects-inner{max-width:420px;width:86%;text-align:center;margin:auto 0;padding:32px 0;}
+  .projects ol{
+    list-style:none;margin:0;padding:0;text-align:center;
+    font-family:'Inter',sans-serif;font-weight:100;color:var(--ink);
+  }
+  .projects li{
+    font-size:clamp(10px,1.2vw,14px);padding:6px 0;letter-spacing:.02em;
+    cursor:pointer;opacity:.9;
+  }
+  .projects li .idx{opacity:.45;margin-right:.7em;font-weight:300;}
+  .projects li .proj-year{opacity:.4;font-size:.72em;margin-left:.65em;font-weight:300;letter-spacing:.03em;}
+  .menu-nav{
+    display:flex;justify-content:center;gap:26px;
+    margin-top:22px;padding-top:16px;border-top:1px solid rgba(var(--ink-rgb),.25);
+  }
+  .menu-nav-link{
+    background:transparent;border:0;cursor:pointer;
+    font-family:'Inter',sans-serif;font-weight:300;font-size:11px;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--ink);opacity:.6;
+    padding:6px 2px;
+  }
+  .menu-nav-link:hover{opacity:1;}
+
+  /* the "flip side" of the black hero — a pale steel-blue page with dark
+     ink, used for the about and contact overlays (still full-screen). */
+  .content-panel{
+    position:fixed;inset:0;z-index:6;display:flex;flex-direction:column;align-items:center;
+    opacity:0;pointer-events:none;transition:opacity .6s ease;
+    background:var(--panel-bg);
+    color:#000;padding:24px;
+    overflow-y:auto;-webkit-overflow-scrolling:touch;
+  }
+  .content-panel.show{opacity:1;pointer-events:auto;}
+
+  /* the project detail view — a straight slide in from the left, wide
+     enough to always clear the wordmark behind it (computed in JS); a
+     clean, flat edge meets the remaining black strip directly (no blur/
+     fade), and tapping that black strip wipes it away again toward the
+     left. */
+  .detail-panel{
+    position:fixed;top:0;left:0;bottom:0;width:0;z-index:6;
+    overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;
+    display:flex;flex-direction:column;align-items:center;
+    background:var(--panel-bg);
+    color:#000;pointer-events:none;
+    transition:width .9s ease;
+  }
+  .detail-panel.show{width:75%;pointer-events:auto;} /* JS sets an exact width per-open so the wordmark is always fully covered */
+  .detail-panel .panel-inner{width:62vw;max-width:420px;}
+  /* once a project has real write-up content (images, longer captions) the
+     placeholder's narrow 420px column reads as cramped on a wide detail
+     panel, so give populated case studies more breathing room (toggled via
+     JS rather than :has(), since this site otherwise avoids relying on it). */
+  .detail-panel .panel-inner.has-case-content{max-width:560px;}
+
+  .panel-inner{
+    max-width:560px;width:100%;text-align:center;font-family:'Inter',sans-serif;
+    margin:auto 0; /* centers vertically when it fits; when it's taller than the
+      screen, this collapses to 0 so the top stays reachable by scrolling
+      instead of being clipped off — the standard flex-centering-with-
+      overflow-scroll fallback. */
+  }
+  .panel-idx{font-weight:300;font-size:12px;letter-spacing:.15em;opacity:.5;margin-bottom:10px;}
+  .panel-title{
+    font-weight:200;font-size:clamp(22px,4vw,34px);margin:0 0 22px;letter-spacing:.01em;
+  }
+  .panel-image{
+    width:100%;aspect-ratio:16/10;margin:0 0 26px;
+    border:1px solid rgba(0,0,0,.22);background:rgba(0,0,0,.06);
+  }
+  .panel-body{font-weight:300;font-size:14px;line-height:1.7;opacity:.8;margin:0;}
+
+  /* --- populated case-study content (detail panel), used once a project's
+     real material has been filled in; falls back to .panel-image/.panel-body
+     above for any project that hasn't been written up yet. */
+  .detail-panel .panel-inner.has-case-content{padding-top:28px;}
+  .detail-panel .panel-inner.has-case-content .panel-idx{margin-bottom:18px;}
+  .detail-panel .panel-inner.has-case-content .panel-title{margin-bottom:40px;}
+  .case-meta{
+    margin:0 0 30px;padding:12px 0;overflow-x:auto;
+    border-top:1px solid rgba(0,0,0,.15);border-bottom:1px solid rgba(0,0,0,.15);
+    scrollbar-width:none; /* Firefox — hide the bar, keep the scroll */
+    -ms-overflow-style:none; /* legacy Edge/IE */
+  }
+  .case-meta::-webkit-scrollbar{display:none;} /* Chrome/Safari/Edge */
+  .case-meta-row{
+    display:flex;flex-wrap:nowrap;width:fit-content;
+    margin:0 auto; /* centers when the row fits; if it's ever wider than the
+      panel (a long location/role string on a narrow screen), this collapses
+      to 0 so the row starts flush left and stays reachable via the
+      .case-meta scrollbar, instead of clipping evenly off both edges —
+      the same margin:auto degrade-to-scroll trick used on .panel-inner. */
+  }
+  .case-meta-item{
+    flex:0 0 auto;text-align:center;white-space:nowrap;padding:0 14px;
+    border-left:1px solid rgba(0,0,0,.12);
+  }
+  .case-meta-item:first-child{border-left:none;}
+  .case-meta-label{
+    font-weight:300;font-size:8px;letter-spacing:.12em;text-transform:uppercase;
+    opacity:.5;margin-bottom:5px;
+  }
+  .case-meta-value{font-weight:400;font-size:9.5px;line-height:1.5;opacity:.85;}
+  .case-overview{
+    font-weight:300;font-size:11px;line-height:1.85;opacity:.85;text-align:justify;margin:0 0 40px;
+  }
+  .case-section{margin:0 0 42px;text-align:left;}
+  .case-section:last-child{margin-bottom:0;}
+  .case-section-images{display:flex;flex-direction:column;gap:12px;margin:0 0 16px;}
+  .case-img-row{display:flex;gap:12px;}
+  .case-img-row-multi > .case-img-wrap{flex:1 1 0;min-width:0;}
+  .case-img-wrap img{width:100%;display:block;cursor:zoom-in;}
+  .case-img-wrap video{width:100%;display:block;background:#000;}
+  .lightbox{
+    position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;
+    background:rgba(0,0,0,.92);opacity:0;pointer-events:none;transition:opacity .35s ease;
+    cursor:zoom-out;padding:24px;
+  }
+  .lightbox.show{opacity:1;pointer-events:auto;}
+  .lightbox img{
+    max-width:100%;max-height:100%;object-fit:contain;
+    transform:scale(.92);transition:transform .35s cubic-bezier(.2,.8,.2,1);
+    box-shadow:0 20px 60px rgba(0,0,0,.5);
+  }
+  .lightbox.show img{transform:scale(1);}
+  .case-img-tag{
+    text-align:right;font-weight:200;font-size:9px;letter-spacing:.02em;
+    opacity:.55;margin-top:6px;
+  }
+  .case-section-caption{font-weight:300;font-size:11px;line-height:1.85;opacity:.85;text-align:justify;}
+  @media (min-width:561px){
+    .case-img-row-multi{width:107%;margin-left:-3.5%;}
+  }
+  @media (max-width:560px){
+    .case-img-row{flex-direction:column;}
+    .case-img-row-multi{width:100%;margin-left:0;}
+  }
+  .contact-lines div{font-weight:300;font-size:14px;line-height:2.3;opacity:.8;}
+  .contact-lines a{color:inherit;text-decoration:none;}
+  .contact-lines a:hover{opacity:.7;}
+  #about .panel-inner{max-width:960px;}
+  .about-intro{text-align:center;margin:0 0 36px;}
+  .about-intro-line{font-weight:600;font-size:11px;line-height:1.6;opacity:.9;margin:0;overflow-wrap:break-word;}
+  .about-intro-line + .about-intro-line{margin-top:8px;}
+  .about-groups{text-align:left;}
+  .about-group{margin-bottom:28px;}
+  .about-group:last-child{margin-bottom:0;}
+  .about-label{
+    font-weight:300;font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    opacity:.5;margin-bottom:10px;
+  }
+  .about-line{font-weight:300;font-size:11px;line-height:1.6;opacity:.85;overflow-wrap:break-word;}
+  .about-line + .about-line{margin-top:12px;}
+  .about-line strong{font-weight:600;opacity:1;}
+  .about-date{font-size:11px;opacity:.55;margin-left:1px;}
+
+  .projects-grid{
+    display:grid;grid-template-columns:repeat(3,1fr);
+    column-gap:40px;row-gap:40px;
+  }
+  .brand-cell{display:flex;flex-direction:column;align-items:flex-start;text-align:left;min-width:0;}
+  .brand-logo-box{height:32px;display:flex;align-items:center;margin-bottom:11px;max-width:100%;}
+  .brand-logo{max-height:32px;max-width:100%;width:auto;height:auto;display:block;}
+  .brand-projects{min-width:0;width:100%;text-align:left;}
+  .brand-projects div{
+    font-weight:300;font-size:clamp(9px,1.5vw,10px);line-height:1.6;opacity:.72;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;
+  }
+  .brand-projects div + div{margin-top:4px;}
+  .brand-projects strong{font-weight:600;opacity:.95;}
+  @media (max-width:970px){
+    .projects-grid{grid-template-columns:repeat(2,1fr);}
+  }
+  @media (max-width:690px){
+    .projects-grid{grid-template-columns:1fr;}
+    .brand-projects div{white-space:normal;overflow-wrap:break-word;text-overflow:clip;}
+  }
+  .panel-close{
+    position:absolute;top:20px;left:20px;
+    background:transparent;border:0;cursor:pointer;
+    font-family:'Inter',sans-serif;font-weight:200;font-size:24px;line-height:1;
+    color:#000;opacity:.5;padding:8px;
+  }
+  .panel-close:hover{opacity:.85;}
+
+  .sr-only{
+    position:absolute;width:1px;height:1px;padding:0;margin:-1px;
+    overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;
+  }
+</style>
+
+<h1 class="sr-only">Oh Hojin</h1>
+<p class="sr-only">Tap anywhere to begin: the name rises and pauses at the top. Tap again to send it down to the bottom, where a power button appears at center. Press it to view the project list, About and Contact. Tap a project to slide in its case-study panel from the left; tap the black strip on the right to slide it away again. Tap the background at any point on the project list to reset back to the start.</p>
+
+<canvas id="c" aria-hidden="true"></canvas>
+<button class="hit" id="hit" type="button" aria-label="Oh Hojin — tap to begin"></button>
+<button class="power" id="power" type="button" aria-label="View projects">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 2v8"/>
+    <path d="M18.4 6.6a9 9 0 1 1-12.8 0"/>
+  </svg>
+</button>
+<div class="projects" id="projects" aria-hidden="true">
+  <div class="projects-inner">
+    <ol>
+      <li data-idx="0"><span class="idx">01</span>Nespresso Vertuo — Pop-up Store<span class="proj-year">2024</span></li>
+      <li data-idx="1"><span class="idx">02</span>Arcane Season 2 — Pop-up Store<span class="proj-year">2024</span></li>
+      <li data-idx="2"><span class="idx">03</span>TFT Set 15 — Pop-up Store<span class="proj-year">2025</span></li>
+      <li data-idx="3"><span class="idx">04</span>LIMIT ZERO BREAKERS — TGS 2025, AGF 2025<span class="proj-year">2025</span></li>
+      <li data-idx="4"><span class="idx">05</span>Killers&rsquo; Shopping Mall Season 2 — Pop-up Store<span class="proj-year">2026</span></li>
+      <li data-idx="5"><span class="idx">06</span>Other Works</li>
+    </ol>
+    <div class="menu-nav">
+      <button type="button" class="menu-nav-link" id="aboutLink">About</button>
+      <button type="button" class="menu-nav-link" id="contactLink">Contact</button>
+    </div>
+  </div>
+</div>
+
+<div class="detail-panel" id="detail" aria-hidden="true">
+  <button class="panel-close" id="detailClose" type="button" aria-label="Close">&times;</button>
+  <div class="panel-inner">
+    <div class="panel-idx" id="detailIdx"></div>
+    <h2 class="panel-title" id="detailTitle"></h2>
+    <div id="detailBody"></div>
+  </div>
+</div>
+
+<div class="content-panel" id="about" aria-hidden="true">
+  <button class="panel-close" id="aboutClose" type="button" aria-label="Close">&times;</button>
+  <div class="panel-inner">
+    <h2 class="panel-title">About</h2>
+    <div class="about-intro">
+      <p class="about-intro-line">공간을 통해 IP를 효과적으로 홍보하는 방법을 고민합니다. 공간 기반 마케팅과 공간 설계부터 제작, 실행까지 전반적인 업무를 담당합니다.</p>
+      <p class="about-intro-line">I think about how to effectively promote IP through space — overseeing the full process, from space-based marketing and spatial design to production and execution.</p>
+    </div>
+    <div class="about-groups">
+      <div class="about-group">
+        <div class="about-label">Education</div>
+        <div class="about-line"><strong>Konkuk University</strong> — B.F.A. in Interior Design <span class="about-date">(2018–2023)</span></div>
+        <div class="about-line"><strong>Yonsei University</strong> — M.S. in Spatial Design <span class="about-date">(2025–2027)</span></div>
+      </div>
+      <div class="about-group">
+        <div class="about-label">Experience</div>
+        <div class="about-line"><strong>FM Communications</strong> — Spatial Design Team <span class="about-date">(2024–present)</span></div>
+      </div>
+      <div class="about-group">
+        <div class="about-label">Projects</div>
+        <div class="projects-grid">
+      <div class="brand-cell">
+        <div class="brand-logo-box"><img class="brand-logo" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFkAAAAzCAYAAAD8ZKSTAAACQUlEQVR4nO3bT4hNURzA8c8bf0oppJSysrKytMVGZONPsSI2NiJ7Nkqys5GVhbCwYcFCFlMsjZU0TSk2Q8rKoJHJYHGNppc379z73j33vPvOt36L15v77ne+U+dNp3PJZDKZIDolfnYLLmNbTS7d/MAdPKp4fQdnsB+rhyUVyCtcKnvRVszidwNztsIv2cH1hnyXphSb8bZB2UWcLOl8tUHf0pE3YjoB4UUcDXS+mIBvcOT1eJGA7NL8xIE+zucT8AyOvA7PEhDtngXs7uF8OgG/4Mhr8TQByV4zj11dzscUS0rTbkGRO7iXgGC/+Yztf533KJaSpp2CI59IQC50ZnEY3xJwKRX5YQJybZl/THRFXtMzf6Yy3ZEzNZAjRyBHrod3y18Ma3dqGlcU3/RlmMBeXBiSRygLiv2QlzV9/seV3nys2jfpjgGlJivet+rcGtC3FMNaLlb8ywUwMxSLcD7FvFkqa/KvpgXqJJXIrSZHjkCOHIEcOQI5cgRy5AjkyBHIkSOQI0cgR45AjhyBcY28M+bNYp92TIWDuKHYYq1jc+q1ZRv34xqZ4rRolROjIcwpzhFifJeLutmw/EWOHIEcOQI5cgRGPfI1vG9aoh+jHnlGcV55rmmRlRj1yBT/j+7D96ZFetGGyDCleNRhoWmR/9GWyPAchxQn7pOiTZHhCY5L7BxH2yLDA5ySUOg2Roa7ONe0xBLdG0S38bXkZ7zBlwE97mMTVpW4Zl7xlFYvbuIDjoj/BMFU5PtlMpl28Acdv+brnujkewAAAABJRU5ErkJggg==" alt="NC"></div>
+        <div class="brand-projects">
+          <div><strong>2025</strong> Tokyo Game Show Booth Planning & Design</div>
+          <div><strong>2025</strong> AGF Booth Planning & Design</div>
+        </div>
+      </div>
+      <div class="brand-cell">
+        <div class="brand-logo-box"><img class="brand-logo" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAM4AAABfCAYAAACgJfgiAAAOW0lEQVR4nO2dUahcxRmAP0tf9kVNtk/StYXWCwUvAQOityFQTWllK9xK1GJuaSEUtQ+hecmFoCAogfhgwIc2IpJKk0BqsBd0UdEoqFmlNAFJnm4sLd7g25r4tK99+Pf0bs6ec+afOTNzzt3MB0tyd+ecmT07/8w///z/P5BIJBKJRCKRaCm3lLz/lPL6ncC2gvcvAt8AG8BXwCX7ps3QA44pyu31UFdWX5/N77gNWAKGwLVJmWvABeDy5N+xQz2HgXvqNtaBE8CggXrngjLBcekAJgbAm8B7wMjh+kXgn4pyHYd7Z3SBJ4E/Tv5vy0lgDbsOeRYR0NgcBI43UO9c8J2IdfWB14CrwFHcOmYoOkibrgLP4t62FUQQvgB2+Wlaoo3EFJxpDiCdVKsShmQXcAVpky8WgPeBV6k3AyZaSlOCk3EMGemb4jDSwUPNfivA28h6KTFHNC04ICN9E8JzFFHLQrMEfEa7VNNETdogOCDC80TE+vr4Vc1MdIG/k9S2uaEtggPwInE6Vg9ZwMdmCbFkJeaAOubodeAvhjJPIwtlLfuB0yWf+TJHu5h/14EzwMfAt8CdwA7gcey+H8C93Liv1cd9DbSdWXVTK5zn8bO/lphirHhpR+0nEAua5p7nKu6zqLxHFX3lPbLXVcxCtoiYn7X39DXbLVL8bBMN4rsDaDv9mPIZw4fgnLNox7mKtuTpIKZn7b0XlffN02Vzv8nl+yc8EWuNcwn9bvqPA7Whh6wzNAyBX6HviGPgD5PrNLgYJnqIwBwgWegaJ6Zx4M2IdRXxW2W5EfAYbqP3Y+jciVaw7/y3W7cmEYyYgtP0QvRxZbkXcPOlY3LdC8qy9znWkWgBMQXnTmW56wHq7qK3fr1es643lOWWa9aTaJCYgrNbWW4jQN3a0f1l6i+wR+jWcw/VrCfRILEEp4duQaxdXLvUr+FjT/V9oCjTJS3ytywxBKeH+Gpp0Ko5tuxRlvvcU33nleXu8FRfIjIhBaeDhA3YODiGEhwtrkaBPF8ry7nu5yQa5rs1rr2P6k1QW7eW5/HXcfPcpSjjU03Ufo9bPdaZiEgdweniL+R3iC6fgCsai9o1c5FEQmiDd/Q67huOiUQjNC04A0TlC6WiJRJBaEpwhkgap720Z6ZJO/kJNXXWOLacRHKPDQizyVnFOuZ1ThexBPoQZK217LKHuhINEFNw1pDkhLcz67D4NWHVtSvoDAQ7gU891Kd1L/rWQ12JBogpOFWm65OIW34oLqKzAO7Gj+Bo3YuadnxNOFIndHoI/MlQ5qfozczbDfXWCZ3uowu8GwHfV5QzcRXzpu8QeNDinjEymSaU1JlxrmEeMb9ELzgPEC6XsdaVJtubqtOOPjpPiaow8UTLCW1VGyNqmIblgO0YofcMOIL7qN0BXlGW9eVQmmiAGOboNWW5FcKqGa8pyy0AzznW8Ta62WaEn7VUoiFiCM6HFmUfCNYK+Ad6y51tdtEOonppcxpoo0QTLSWG4LRFXRtj12EPIAaFqhkk8wC/gl5oRtSPMk00TCxz9BqiiplYQTpsKG+C17FLkthHLGRDZkMe9uDm5HqI9nhLJByJJTi26loo69oYEU6NWXeaJfQzShUDyjOVJrYQsXzV2qKugZjQ9weuo4gR+hRViZYT08lzTVkutHUNZNR/OXAd04yA+0kq2twQU3DaYl3LWCXOzDNEhCa2Y2siIDEFp03qWsZp5PSA9UD3fx5JpZuEZs6IHY+zpiwXM+fYJeTIjoP489AeIAJ5hKSezSWxBUerrnWJf2rzccTBcy/6mXGaEbJuundyj+T5PMeUeUdrArGu46aC9NAlEM/H6HTQnWTgs8MuIh7eO4FtSJRod9KuzxFH1wvEOaSpie+fSCQSiUQikUgkEolEIpEoosyqZkMX+AlwN+IxvI1Zh8jMafMD4h0T/pTDNcc91JtZ4lx5g3r7SXWOf4fyZ1D3vra49pMuYv3cAdzDpiU0Yx0JA7mIROFeIOJeWwd5kDanOOePQT9KuPNheo7t8rF39JRj3dnriZr12xwdb3Nq9dma97V92Q58WUIWl7pexfLkCJcN0Cxw6yzurvZdJO4mEyDfTp2uXsgPe22FG4/UuLaHPtZoXugjg8VZ3A8ByEJNzqIUIBvB6SENPIbfmeIAIog+PQW0B+Xm2eexDa70cR9IfJ0esRXoIh39LP4Giz4iQIcx/AZawemjSyPrShd4Hz8/fJ1RtwlXnyJcvcMf9dqK9pIN4qEGimeRxCulwqMRHG0yPx/UmW4z6gaLtUFd02YCnaaDnyjVttNBn02oDkvA38o+NAnOIvGEJuMV6j0UVzUtow3qmksbYsQwtYGDxFvH9SkZyKsEpwO8E6Q51XTRJ/XL42Nx3AZ1rYu96Xc5QDvaRgdRo2JypOjNqmQdz2E/8q8DZxD7eJaJ/zZE/dlncb8+MtvZ2vF9xfQ/TPMJA/vY7SvFjGEqI/Ma90GR5/2vLa4fACeQUJa8mX0XkvdcsyxYmJRX9YdF7PdlTI3oIPZy7T1dVMS6exjT38eVuvs42csmt7Tt7xVqHye0Wq/tP9pkkkeV95vZUypT1TQ50DKGyKnOppROY+QoD22SDG3y8gyNmjZAdGRTHunQ6to65uewhN4sbTJojGgms49v7lWUWUfySWh4Dl3Y/J78G0WC00H2VjQMkZj6qpEqzyr6CEub4wU1atoJRP15SVE2pHXtCrofV7vgNxlETjEfAW6a9esZi/vZzE43ULTG0f5YI9xPiz6A6OSmGWU3+uSEGmtaFrqt0cP3oR+5XDlJ9eyu+f5dzB3qZjoZ4RvL8p9gfsYX828UCc6yssJDuDsjjoE/Y7aQ/Eh5P42aNmRTyLNjP6r2PTJ1LaSR4COqBUcjvL9Q1PMhurDreeBpJNWxdkDfQHJEWFGkqmmsMyMk+38dsnNoql7aL6RR0/LHfGgW36E3Q98zfK4xS//M8PkAN61gq7JAhA3SvOD0lBWeol0/hkZN+yT3d+mu8BShN0NHmBenVdbKDmZDzptWLWo32sPBlhDL6GECCVBeVfuB8rq3fDekBho1bZ3ZfYENpONWPdgY6toZqlXWRynfz9mpuH9+wAjJNizd86e4jjlr0r+wcyt6dvIaIhrHJ4o6VOQF527ldRd8VO4JjZr2bsn7pzBbEENvhr5FteBkZumiGd6kShYNGCFZwv4kiIwBZtX8RfQW32nyp00MkAX/f3EUJpd4nBFbT00rmyE11qbQ6tolzEaWMkvnLw3X2ZhmtwK+9qP6yGD1GjK4fIEEEKrDOfKCs11xjY1LhY+owapIQK1vWtkMqcksGsN37R3D50Xe0prvPo9m6NPIJrZPFhAhuoL0N6MA5QXnHs8NCo1GTauyKo3R7ROFtq6tGT4vmvU0flZN+9uF4jjwc/zl+s7oIoGan2OwZsbOHe0bjZpmsipprE6h1TXTLN5ldtFtClpzyX+9lfgUcfXymSw/YwFR4UoHp7zgXPPcgJBo1TSTVUljdQqtrmUbslVMz3pdzNalj2q1aGswRmafTIB8H9dSmoMgLzgaa9ldtZvjB42aprEqbaB74KHVtfzhvHkenPq/xofPtLk6T2QCtAMZTJ/HnxC9Q8Gax0VVWyi6UQNo1LQyM3QejfUptLpmWmstsbnntGwoO8S/+rJV2EC8UnYgx7bsRzzRtZunebrA7/Jv5gVHa8/WbLyFRKumZUe/m16aqMLQ6lq2IVtFNtOY3KJsYnl8MsDsRlXXvcqGEWKFW0Vm7O2IUcH2/Ndn8m/kBecr5Y20asteqh+W67HsTZ3eHFpdO2X4fBkRXpMbSZs8O9rEGDEqrCKzkbb/zRhn8oLzpfJG+2hWXdOoaSEIra6Z9l0eQkJ+qxgxH7E3oRkhA7tWeCoFZ4xOFyzU+yzJ0uiaOJ/7u8lslaHVNdOGbBfzMzPNWlsRTWi4q3r6pLLcrdN/FBkHtA14hnpJuLWCl58Fm1LTMuoOGFVoN2SrmEdvAQ02oea1KRIcjbs9yOj3V9wa26NgwVXASWZ3/ZtS0zJWCPsD1Q0D0B5QvJW4riznMqjZhOf/nyLB2cAu7uFt7GaeXcBn6OIk1nJ/tyWpeMjkf3XCAKajXOcJrbX3GHZ9sYM+h98NS4ayvGovoY97WEI2mw5SfbaLTS4rJvfJqy1aNW0/bgvk25Ac1iaWqa9SlZFtyLoMEPko13nClJ8h4zPEiGL6/Rcn99QGut2wZCgTnAHmmPw8xyavIRJw9J/J+3uYPdxHw6GC9zRqWma7d0XzvVfY3CMKwbu4CU7MoLUi+vh7Jge5MYBvDZ3gdJGYoCwh4VdIp/8ecDsiMI9gl6N8xlG4KpPn73FzW8gHDbkwZLbza9U0k4u+iXPo2v8A4Wadt7AP2IodtBabAXYzcWneZwdO5N+ocrnZoJkkdiNEaPNo1bS1mvVrjSPLNeupwiUcQOtetJWxSZTpiwEFA6TJV+009u4JdfkNxSOn1ppW16qkcX2B8NY127CAm8Fb4BLiwBmLESX7PBonz1XiCE+2k1s02mrVNF+pkLSbiCGta7ZhAW3KAxGSI8Trj/dTMohqvaNXEbUtlMftEGlk2ZpBq6b5SoWk3URc9lRfETZhAUX7XfPMKv7Dp6dZR/pj6ZrRJqzgNOKq7XNBPEIewINUL2y1apqvGBStuhdSXdPkXMu4GYLW8hxHHDV9zj5Zf7wPg6HFNh4nU6cWkAa7zkDDyX3uwnwGjFZNW6/Rnjw2ri8h1TVtlpqbKWhtmhGbns51IkDz/dE4e9/iWNE0i5PXDylP9vFvZF/nPGJTt1ErOujyHl/Hrzm2C9yhKPc1Nwqs5rrr6Nqq/e6azd669+oh+yCxyD9XLV1kxtjBZn+cNktnA+IHwGVkbXgzqbmJRCKRSCQS887/ANCQ8kddzLeyAAAAAElFTkSuQmCC" alt="Riot Games"></div>
+        <div class="brand-projects">
+          <div><strong>2024</strong> Arcane Season 2 Pop-up Store at Shinsegae Gangnam</div>
+          <div><strong>2024</strong> Arcane Season 2 Fan Festival at Seongsu</div>
+          <div><strong>2025</strong> TFT SET15 Pop-up at Seongsu</div>
+        </div>
+      </div>
+      <div class="brand-cell">
+        <div class="brand-logo-box"><img class="brand-logo" src="data:image/png;base64,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" alt="Disney+"></div>
+        <div class="brand-projects">
+          <div><strong>2026</strong> Shop for Killers 2 Pop-up Store in Gangnam</div>
+        </div>
+      </div>
+      <div class="brand-cell">
+        <div class="brand-logo-box"><img class="brand-logo" style="max-height:16.5px" src="data:image/png;base64,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" alt="Samsung"></div>
+        <div class="brand-projects">
+          <div><strong>2025</strong> Samsung AI Forum Spatial Design</div>
+          <div><strong>2026</strong> SFF/SAFE KR Spatial Design</div>
+        </div>
+      </div>
+      <div class="brand-cell">
+        <div class="brand-logo-box"><img class="brand-logo" src="data:image/png;base64,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" alt="Hyundai Motor Group"></div>
+        <div class="brand-projects">
+          <div><strong>2024</strong> Corporate Event Spatial Design</div>
+          <div><strong>2025</strong> Corporate Event Spatial Design</div>
+          <div><strong>2026</strong> Corporate Event Spatial Design</div>
+        </div>
+      </div>
+      <div class="brand-cell">
+        <div class="brand-logo-box"><img class="brand-logo" style="max-height:19.5px" src="data:image/png;base64,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" alt="Virnect"></div>
+        <div class="brand-projects">
+          <div><strong>2024</strong> Year-round Exhibition Space Management</div>
+        </div>
+      </div>
+      <div class="brand-cell">
+        <div class="brand-logo-box"><img class="brand-logo" style="max-height:17.5px" src="data:image/png;base64,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" alt="Nespresso"></div>
+        <div class="brand-projects">
+          <div><strong>2024</strong> Vertuo Pop-up Store at Shinsegae Gangnam</div>
+          <div><strong>2024</strong> Vertuo Pop-up Store at Shinsegae Mokdong</div>
+          <div><strong>2024</strong> Vertuo Pop-up Store at Lotte Department Store Jamsil</div>
+        </div>
+      </div>
+      <div class="brand-cell">
+        <div class="brand-logo-box"><img class="brand-logo" src="data:image/png;base64,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" alt="CJ ENM"></div>
+        <div class="brand-projects">
+          <div><strong>2024</strong> KCON Hong Kong Exhibition Booth Spatial Design</div>
+        </div>
+      </div>
+      <div class="brand-cell">
+        <div class="brand-logo-box"><img class="brand-logo" style="max-height:15.5px" src="data:image/png;base64,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" alt="Garmin"></div>
+        <div class="brand-projects">
+          <div><strong>2025</strong> Spoe X Influencer Event Spatial Design</div>
+          <div><strong>2025</strong> DDP Influencer Event Spatial Design</div>
+        </div>
+      </div>
+      <div class="brand-cell">
+        <div class="brand-logo-box"><img class="brand-logo" style="max-height:24px" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAK0AAAArCAYAAAAKRgiGAAAKzklEQVR4nO2ce7BXVRXHP/deXsbTEBF6YKKOj2KMkka0vDZMRY9bCWMQmsCIKVBqltU0zjhT02MMQVB0gFLJHDXAKQ1QoTcWTjpWJJBRvJ9BQCBwuZfbH2vv2ft37lrnnN8DdO4935kz55x11tpnn3PW2XvttdbeUKBAgQIFChQoUIK6xHkT8M4ccr8D/lqjOtQDE4G3ANuBJY5+FXBxgneJ4wEYDoxUylsGbHDHPYFJCs+LbjvVOBv4pEJ/Bth4SmvSgfA00JZj24AoWy1wdVRuk6OdDhxT7jsqkrvDqNs1Ec+ZBs+3alT3ctFk1KcpTahAKSpVvHOAxhrcvw74ujveBix1x1OAbjUov0AHRDWt5VdqcP9LgRHu+IdAC9C9RmUX6KCoRmlHIzZaNbjd7Y8AP3bHnwUGVllugQ6MLlXI1gNTEduyEgwGxrrjB4CDiLnwzZzyG4DFCn27QivQgZF3IOa314FeFd7r+66MVmCIo43MuN+o9sWkohiIdUBU6wE4DZhQgVwvYLo7/gWwyR1P19kLFAioxjzwuAOYD5woQ+Z6xIcKMMPtz6TUXZWF7ugehqPA8QzZnkBv49ohpPU7jfbvp81dt6CV2YLY7GnoY8im3a8r0jONBC4AzkLeRzPiiVkH/AFYjfRmMXrR3kcP+d5dDP+OmhEXZQPibwf4X4K3DngvcCXif38b0MPJ7gHWA6tcnZvLqEPZ5oHfGsu4RwPiSG8D1hBe3p057lMrP23a5l/6Y8q111Oeq5tR3qKIxzIP0vzhGsYCW8soY3RC/lGDdwb50RDVwX+Xm9z5ygTvVcDanPXdA9yI/lOpqFRpl2iFGfhoJHedo3V3lS2UNl1p64CZFTxTG/AdgiKMMnj2kL/3/ZCT2epk6oBXHW1MxDcdaenLre8ipDfJRKVK24o093mw0snsRboHgGtz3qezK+2XK3ieeJviyukC7DR48g52H3H83ns0gvBduzvaVVSmsH6brd24VqHYemBaDr53Ax92x/cgNlQ5bq7OjNMRj0s1mAn0RezsBQbPDTnK6QuMRxTyYUfz338uwb6dR3U6Ng3RmRLUYiDmMRXpgtJao9vc/jjwoDu+EriohvXIg8XAk8a1sgYBNcIs4I8K/XB0PAUZ+CSxD2kAXgAOAG9Fuu7baO+O7IkMgmcDC9Fdf2OBfsD+lPpOQLruxcBuxz8eGYzPczwfAc5VZJuBe5Eedw8yAB2OBJqSvXU9Eh2dnFKXTPNgd8b1tMLPQP7wNkr/8qWOtj+j7FqaB3n8tKfSPMjy09YRBq/xttM9o4Yh6O90TcTzklGfKdioA15zfI2O5s2WZyO+RUq5LYiCaugD/EOROUIw2YDym+57SXdtfRV71Hcz0mWAtAwAQ5GBGRj2SwFAwuVDFPpdSEOiYRPwXYV+MdKAQOjtkpiaUpfLkRZ0M5KiWg/c4q75b9gV+IQiOx942Sj3ILqZ2AP4QEwoV2nXAk+lXL8Q6Zq0G/skmJXIKBPkYeuRv8l6gQXs1um5DLkVBn2Y2/+M9j5cgEsQ368Gr9D3Iw3YB5Gsv12ElnYoYZAdY1l6dfm9Qb80PqnESJ6Vcf1WhTYOsXsgDCb6AV90xw+QbkN1dlgKtCtDbqtBP8/t92Pb9l9QaP0R8+sE8BNH80o8B+n+Ac43ytxo0D32offk74lPKlHaVYhNY6EJSYbxqCO4Rf4F/ModTyJEtO6voB6dCW9XaK2k29hgR9PiAc8jBs9k2g/Ur0VMvBXADkSJxyCK9lDENxgde9Mqiyj9QYV+dnxSidKa/rOozBuj88sQswHgbuQBuxDMheWIMhewMUCh/Rf5Fmk4atDPiI5/jd7LDQSuiM7rkAEXhEbmOkSJn6M0u66/cd+scDZIa5vEWfFJpT60R0mPUd9CsGl8EsxhJwfwKULr8YMK69CZoOUlHFZoSZxAd+HF5TUjAyQNsc/2coLtugzRnS+5a8lGzMr8O5ZWWQetdyh5/kqVdj/BqayhH+Lvi5Ng5kQV+obbrwV+W2EdOhO6K7S8/mStdWtInC80ZK9BXFFQOgA7jiTqnIO43Z5PyFlTpbRBXxLac5XUt5poRZaL6mvIn9iA/PFzHP39hCk23yO7iyugv6O8CSV5Akh/d1sSXRGbNR6AeR+7b4VnEwZgHtV8U00n27IY8mINkkZmYRjB7/YEwebxtuw+xOVSIBta66O5lDRofElbtw0Jv2q4CZni34AEgnYQwrgngB8pMlYvkOcH0qJ+JeVVm3twd8Z136zPcvvBBHPB5x4UyMZ+hZZnxkhX2psCIOHeJJ5A775HIGmjEHrL8YgJ8BR6cCOZS+uhmTlJ9FVoJV6HapV2Kdlzsv5MWBjDmwtx7kGBbOxUaH3I/n49DfoOhbYX2/nfF/H5rkTMEh8Bs1pnK0qX9aPVoXtKtsQn1SptCyEka8Ff70UYbS4k22d3MqG1PidTrtpyNyu0euzZFx6W62mjQX84paw5SEt8GRLs2Io9iN5i0LNmWfdEz6FdH5/UIjXxIexR4QFC2PfzhD9/Vg3umwdWvbQ4fhJaZKYb2YqSBstN+I4MuVcN+rsy5KzIlFXecnR79ARBob0P/kHs97veoFv18dCCKAB/iU9qobT7gJ8a1+5D7NZ6xJsAMnhbY/DXGofQla+JROaQgm0G/TNV1MfqXcaR7g14yaBfn3G/iQrtKJJNpeEw8LhCfwbp8v0ADILPXcMWdDv8BtKfc5xBX5Uik5maeLUhN1zhbQEGuevx9A5tATYQJap1aiLAKwbf80iCsTWlw0ojPIL4LAc52Tq39TD449TE3oT0zOS2AGlprIZktSLTikSlkorQgOTTavd5zCjfo1GR8e99mjtPzgHTMNe4/7dp/87rkPfdrPC/pjxfCSpVWmj/UuM/cYWjbcK2306W0lp81jbTyfXAnpJSzhYrLch8unLk/aqPE1J4NiCupxlILsG2FN5G0tGQkN/iaHEebZ51Gi5JqcNO5OeZgfysaZMeM5cVqEZpxyR4fTrd+REtLU/zZCltH8pTvpmR7Giqm+OkKe0F2K1tmtJ2Q5SzmrqsJl9Q4q5Ixi9ddYU7303OCYeEBP9Kt90oHodazREDWXTDp8q9QEj2vdntD2OHC08mDgIfR/dNZmEZ8DnyJXrkxTrEdssT0ozRjNiT5axLEOMQMhhuy8HrV69sJWSB+QZnbhl1mAT8J28FE2hF6tsuF6GWSnuc4BXwSTC9CTmzce7BqcbLyDy0xZS3qAhISzkUibnXSnkXIeHstIiihheRuVflKsJmxFVlraOQhJ9N8qS7VxzGnWcJKdiFJIlrLrs0HAA+jZHEngyrLcf2sUF2Eu98xBfn/9QLCa6SrFyFViQZPA1xUvPfDP5/GrLbkSSegcjU5osoTdHz+JNC24HYVrcD70OSkoeQz8FvrZj+CvJBhyKTO89DjwYl3Ue/Qaa7TEfcT2krt69FWsYF5I8+diXMrPUBoImIXftLyl/gbx1iEk1G6jsshXezq+t9SOqlityreBR402IA4q/tjyjcMWSW679J+fApaAJ+juQ4n4v8lBsRz8bHKJ28WAn6IdlhA5Cw7nHEFbiRsGBLgQJl4VlEcW51542EEX8tlxwoUKAmGISYaS2EEPDjiNLeaQkVKPBGwrsRfQDCr1XRSggUFSjwpkE9EvxpI8wN80r89BtVKQ3/BzNvrLIeS8huAAAAAElFTkSuQmCC" alt="Mitutoyo"></div>
+        <div class="brand-projects">
+          <div>HQ Showroom Spatial Design</div>
+          <div>HQ Total Interior Renovation</div>
+        </div>
+      </div>
+</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="content-panel" id="contact" aria-hidden="true">
+  <button class="panel-close" id="contactClose" type="button" aria-label="Close">&times;</button>
+  <div class="panel-inner">
+    <h2 class="panel-title">Contact</h2>
+    <div class="contact-lines">
+      <div><a href="mailto:magpieo7@naver.com">magpieo7@naver.com</a></div>
+      <div><a href="https://instagram.com/ooooohhojin" target="_blank" rel="noopener">@ooooohhojin</a></div>
+      <div><a href="https://www.linkedin.com/in/hojin-oh-978712383/" target="_blank" rel="noopener">LinkedIn</a></div>
+    </div>
+  </div>
+</div>
+
+<div class="lightbox" id="lightbox" aria-hidden="true">
+  <img id="lightboxImg" src="" alt="">
+</div>
+
+<script>
+(function(){
+  var canvas = document.getElementById('c');
+  var ctx = canvas.getContext('2d');
+  var hit = document.getElementById('hit');
+  var powerBtn = document.getElementById('power');
+  var projectsEl = document.getElementById('projects');
+  var aboutLink = document.getElementById('aboutLink');
+  var contactLink = document.getElementById('contactLink');
+  var detailEl = document.getElementById('detail');
+  var detailClose = document.getElementById('detailClose');
+  var detailIdx = document.getElementById('detailIdx');
+  var detailTitle = document.getElementById('detailTitle');
+  var detailBody = document.getElementById('detailBody');
+  var aboutEl = document.getElementById('about');
+  var aboutClose = document.getElementById('aboutClose');
+  var contactEl = document.getElementById('contact');
+  var contactClose = document.getElementById('contactClose');
+  var lightboxEl = document.getElementById('lightbox');
+  var lightboxImg = document.getElementById('lightboxImg');
+  var TEXT = "OH HO JIN";
+
+  // the "ink" theme color — wordmark glow, trail, power button, project
+  // list/menu text, and the About/Contact/detail panel background all
+  // derive from one of these; each entry keeps the same saturation and
+  // lightness as the original steel blue, just a different hue, so the
+  // black text on the panels stays equally legible on every one. Cycles
+  // blue -> red -> purple -> yellow -> blue... on every full reset.
+  var INK_PALETTE = [
+    { ink: "#AFD2E6", inkRgb: "175,210,230", panel: "#B9D5E6" }, // blue
+    { ink: "#E6AFAF", inkRgb: "230,175,175", panel: "#E6B9B9" }, // red
+    { ink: "#D8AFE6", inkRgb: "216,175,230", panel: "#DBB9E6" }, // purple
+    { ink: "#E6DBAF", inkRgb: "230,219,175", panel: "#E6DDB9" }  // yellow
+  ];
+  var inkColorIndex = 0;
+  var INK = INK_PALETTE[0].ink;
+  var FONT_WEIGHT = "100";
+  var FONT_STACK = "Inter, sans-serif";
+
+  function applyInkPalette(){
+    var p = INK_PALETTE[inkColorIndex];
+    INK = p.ink;
+    var root = document.documentElement.style;
+    root.setProperty('--ink', p.ink);
+    root.setProperty('--ink-rgb', p.inkRgb);
+    root.setProperty('--panel-bg', p.panel);
+    if (layout) renderWord(); // re-bake the trail/wordmark bitmaps in the new color
+  }
+
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  var MOVE_MS = 3000;      // slow rise, and the slow fall that follows it
+  var SETTLE_MS = 1000;      // gentle fade of the trail once the rise arrives at the top
+  var POWER_DELAY_MS = 300;  // pause once settled at the bottom, before the button fades in
+  var RESET_MS = 3000;       // slow return to the initial screen, rippling the whole way
+  var SIDE_MS = 900;         // gentle glide as the trail migrates from one side to the other
+  var NUM_LEVELS = 4;
+  var ROWS_COUNT = 22;
+  var TRAIL_PASSES = 40;   // stacked copies drawn per frame for the drip trail — more = smoother
+  var DETAIL_EDGE_CLEARANCE_PX = 44;  // clears the wordmark past its right edge, see measureLayout()
+
+  var layout = null;
+  var levelCanvases = [];
+  var levelRows = [];
+
+  // one flow, now click-driven at each pause rather than timer-driven:
+  // home -(tap)-> rising -> topSettle -> topPause -(tap)-> falling -> bottom
+  // -> (power button) -> projects -(tap background)-> resetting -> home
+  // tapping the background also resets straight from "bottom" (before the button is pressed)
+  // topPause looks exactly like "home" (no trail at all) — the trail only
+  // ever appears while the word is actually in motion.
+  var seq = 'home';
+  var curY = 0, curTrail = 0;
+  var tween = { fromY:0, toY:0, fromTrail:0, toTrail:0, startT:0, dur:0 };
+  var bottomArrivedAt = 0;
+
+  // the trail always drips from the side the word came from — below it
+  // while rising, above it once it's falling, and it glides smoothly
+  // back below once the power button is pressed (and again on reset).
+  // curSide eases continuously between -1 (above) and 1 (below) so the
+  // trail migrates rather than jumping from one side to the other.
+  var curSide = 1;
+  var sideTween = { from:1, to:1, startT:0, dur:0 };
+  var sideAnimating = false;
+
+  function setSide(target, dur){
+    sideTween.from = curSide; sideTween.to = target;
+    sideTween.startT = now(); sideTween.dur = dur;
+    sideAnimating = true;
+  }
+
+  // the drip trail's undulation runs on its own clock so it can be frozen
+  // (topPause) independently of real time, then resume seamlessly.
+  var rippleClock = 0, lastFrameT = null;
+
+  function easeInOutSine(t){ return -(Math.cos(Math.PI * t) - 1) / 2; }
+  function now(){ return (typeof performance !== 'undefined' ? performance.now() : Date.now()); }
+
+  function measureLayout(){
+    var w = window.innerWidth, h = window.innerHeight;
+    canvas.width = w * dpr; canvas.height = h * dpr;
+    canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    var fontSize = Math.min(w * 0.11, 130);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = FONT_WEIGHT + ' ' + fontSize + 'px ' + FONT_STACK;
+    var mw = ctx.measureText(TEXT).width;
+    while (mw > w * 0.86 && fontSize > 10){
+      fontSize -= 2;
+      ctx.font = FONT_WEIGHT + ' ' + fontSize + 'px ' + FONT_STACK;
+      mw = ctx.measureText(TEXT).width;
+    }
+
+    var boxW = mw, boxH = fontSize * 1.24;
+    var margin = Math.max(60, fontSize * 0.5);
+    var edgeGap = Math.max(28, fontSize * 0.45);
+    var homeTop = h / 2 - boxH / 2;
+
+    layout = {
+      w:w, h:h, fontSize:fontSize,
+      boxW:boxW, boxH:boxH,
+      boxLeft: w / 2 - boxW / 2, boxTop:homeTop,
+      margin:margin,
+      topDelta: edgeGap - homeTop,
+      bottomDelta: (h - boxH - edgeGap) - homeTop
+    };
+
+    // the wordmark sits centered on the whole screen, independent of the
+    // detail panel — so the panel's open width has to reach past the
+    // word's right edge (where "N" of "JIN" ends), or the last letter(s)
+    // would peek out from behind its flat trailing edge.
+    var textRightEdge = layout.boxLeft + layout.boxW + layout.margin;
+    var desiredPanelPx = textRightEdge + DETAIL_EDGE_CLEARANCE_PX;
+    var pct = Math.max(60, Math.min(96, (desiredPanelPx / w) * 100));
+    layout.detailWidthPct = pct;
+  }
+
+  // render the word once per build into a few increasingly-blurred, glowing
+  // bitmaps, then slice each into thin rows for the undulating drip trail.
+  function renderWord(){
+    var m = layout.margin;
+    var cw = Math.max(1, Math.ceil((layout.boxW + m * 2) * dpr));
+    var ch = Math.max(1, Math.ceil((layout.boxH + m * 2) * dpr));
+
+    var baseBlur = Math.max(2, Math.min(5, layout.fontSize * 0.018));
+    var blurRadii = [baseBlur, baseBlur * 3, baseBlur * 6, baseBlur * 10];
+    var glowBase = Math.max(10, layout.fontSize * 0.14);
+
+    levelCanvases = [];
+    levelRows = [];
+
+    var rowH = (layout.boxH + m * 2) / ROWS_COUNT;
+
+    for (var lv = 0; lv < NUM_LEVELS; lv++){
+      var lc = document.createElement('canvas');
+      lc.width = cw; lc.height = ch;
+      var lctx = lc.getContext('2d');
+      lctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      lctx.fillStyle = INK;
+      lctx.textAlign = 'center'; lctx.textBaseline = 'middle';
+      lctx.font = FONT_WEIGHT + ' ' + layout.fontSize + 'px ' + FONT_STACK;
+      lctx.shadowColor = INK;
+      lctx.shadowBlur = glowBase + blurRadii[lv] * 0.6;
+      try { lctx.filter = 'blur(' + blurRadii[lv] + 'px)'; } catch (e){}
+      lctx.fillText(TEXT, layout.boxW / 2 + m, layout.boxH / 2 + m);
+      try { lctx.filter = 'none'; } catch (e){}
+      levelCanvases.push(lc);
+
+      var rows = [];
+      for (var r = 0; r < ROWS_COUNT; r++){
+        var ry = r * rowH;
+        var sy = Math.round(ry * dpr);
+        var sh = Math.max(1, Math.round(rowH * dpr));
+        var rc = document.createElement('canvas');
+        rc.width = cw; rc.height = sh;
+        rc.getContext('2d').drawImage(lc, 0, sy, cw, sh, 0, 0, cw, sh);
+        rows.push({ top:ry, h:rowH, canvas:rc });
+      }
+      levelRows.push(rows);
+    }
+  }
+
+  function build(){
+    measureLayout();
+    renderWord();
+  }
+
+  function startTween(toY, toTrail, dur){
+    tween.fromY = curY; tween.fromTrail = curTrail;
+    tween.toY = toY; tween.toTrail = toTrail;
+    tween.startT = now();
+    tween.dur = dur;
+  }
+
+  function beginRise(){
+    if (seq !== 'home' || !layout) return;
+    seq = 'rising';
+    setSide(1, SIDE_MS); // drips below the word as it climbs
+    if (reduced){
+      curY = layout.topDelta; curTrail = 1;
+      arriveAtTop();
+      return;
+    }
+    startTween(layout.topDelta, 1, MOVE_MS);
+  }
+
+  function arriveAtTop(){
+    // the trail quickly settles back to nothing, so the word sits at the
+    // top looking just like it did at "home" — then waits for the next tap.
+    if (reduced){
+      curTrail = 0;
+      seq = 'topPause';
+      return;
+    }
+    seq = 'topSettle';
+    startTween(layout.topDelta, 0, SETTLE_MS);
+  }
+
+  function beginFall(){
+    seq = 'falling';
+    setSide(-1, SIDE_MS); // drips above the word as it descends
+    if (reduced){
+      curY = layout.bottomDelta; curTrail = 0;
+      arriveAtBottom();
+      return;
+    }
+    // trail stays at full strength through the fall — it keeps rippling
+    // at the bottom and through the power button / projects screens,
+    // and only fades away again once resetToStart() brings it home.
+    startTween(layout.bottomDelta, 1, MOVE_MS);
+  }
+
+  function arriveAtBottom(){
+    seq = 'bottom';
+    bottomArrivedAt = now();
+  }
+
+  function openProjects(){
+    if (seq !== 'bottom') return;
+    seq = 'projects';
+    setSide(1, SIDE_MS); // the trail glides back below the word once the button is pressed
+    powerBtn.classList.remove('show'); // the button disappears once pressed
+    projectsEl.classList.add('show');
+    projectsEl.setAttribute('aria-hidden', 'false');
+  }
+
+  function resetToStart(){
+    // tapping the background resets things — whether the project list is
+    // already open, or the word is just sitting at the bottom with the
+    // power button showing.
+    if (seq !== 'projects' && seq !== 'bottom') return;
+    if (seq === 'projects'){
+      projectsEl.classList.remove('show');
+      projectsEl.setAttribute('aria-hidden', 'true');
+    }
+    // each reset cycles the ink theme color forward (blue -> red -> purple
+    // -> yellow -> blue...) so it plays through the ripple back to home.
+    inkColorIndex = (inkColorIndex + 1) % INK_PALETTE.length;
+    applyInkPalette();
+    seq = 'resetting';
+    setSide(1, SIDE_MS); // it's heading back up, so the drip trails below it again (a no-op if already there)
+    if (reduced){
+      curY = 0; curTrail = 0;
+      seq = 'home';
+      return;
+    }
+    // slow, rippling return to center — trail eases from full strength
+    // down to nothing as the word settles back into place.
+    startTween(0, 0, RESET_MS);
+  }
+
+  // --- project detail case-study content, keyed by each <li>'s data-idx.
+  // a project with no entry here (or none yet) falls back to the plain
+  // "coming soon" placeholder — so projects can be written up one at a time
+  // without anything breaking for the rest.
+  var PROJECTS = {"0": {"meta": [{"label": "Year", "value": "2024"}, {"label": "Location", "value": "Mokdong → Jamsil → Gangnam"}, {"label": "Role", "value": "Drawings, rendering, fixtures, supervision"}, {"label": "Contribution", "value": "30%"}], "overview": "Nespresso ran the Vertuo Double Espresso Bar as a walk-up tasting counter inside three department stores in April 2024, introducing shoppers to the Vertuo line's centrifusion brewing and its Double Espresso capsule format directly along each store's main circulation path. Rather than a single flagship build, the concept was designed once and repeated three times — Shinsegae Mokdong, Lotte Jamsil, and Shinsegae Gangnam — with the same fixture kit reassembled to fit each store's own column grid, traffic pattern, and footprint within a shared budget.", "sections": [{"rows": [[{"src": "images/p0/01.png", "tag": "Mokdong Plan"}], [{"src": "images/p0/02.png", "tag": "Jamsil Plan", "ar": 0.7973}, {"src": "images/p0/03.png", "tag": "Gangnam Plan", "ar": 0.6013}]], "caption": "Because the bar had to reappear in three different department-store footprints, the fixtures were designed as a modular kit rather than a one-off build — these plans work out how the same bar, shelving, and back-counter modules reassemble to fit each store's own layout."}, {"rows": [[{"src": "images/p0/04.png"}], [{"src": "images/p0/05.png"}]], "caption": "Each bar sits directly on a main walkway rather than tucked into a corner, so shoppers come across it the way they might stumble on a bar while out walking — the lighting and material palette were kept warm and unobtrusive on purpose. Oil-stained timber and wood-grain veneer carry a vintage-bar read through the counter, shelving, and signage frame."}, {"rows": [[{"src": "images/p0/06.png", "tag": "Jamsil → Mokdong → Gangnam"}]], "caption": "The same three-part kit — bar counter, back-bar shelving, and a straight service counter — was re-assembled for each store after mapping out that location's main walkway and its highest-traffic point, so it could be taken apart and rebuilt for all three pop-ups within a single, limited budget."}, {"rows": [[{"src": "images/p0/07.jpg"}], [{"src": "images/p0/08.jpg"}], [{"src": "images/p0/09.jpg"}]], "caption": "At each store, the core fixture was positioned at a structural column so the Vertuo machines and other electronics could run and be serviced without competing for the same space — keeping day-to-day operation trouble-free for the length of each pop-up."}]}, "1": {"meta": [{"label": "Year", "value": "2024"}, {"label": "Location", "value": "Shinsegae Gangnam → Seongsu"}, {"label": "Role", "value": "Concept, design, vendor management, supervision"}, {"label": "Contribution", "value": "80%"}], "overview": "Riot Games marked the November 2024 premiere of Arcane Season 2 with two connected activations in Seoul: a ten-day pop-up at Shinsegae Department Store's Gangnam branch, staged on the Central City open stage inside the Express Bus Terminal complex, followed a week later by an expanded, three-floor Fan Fest at S.Factory in Seongsu. Rather than a single build, the concept was designed to travel — the department-store activation introduced Piltover as a physical structure at the center of a real transit hub, and the larger, warehouse-scale Fan Fest then rebuilt that world for League of Legends, Teamfight Tactics, and Wild Rift players to explore across Piltover, Zaun, and the gate between them.", "sections": [{"rows": [[{"src": "images/p1/01.png", "tag": "Piltover Cathedral"}]], "caption": "Once the site was confirmed as the open stage at the center of Shinsegae Gangnam — itself built inside the Express Bus Terminal's Central City complex — the brief became how to carry the Arcane universe into that specific site as directly as possible. Piltover also reads as a transit and logistics city within the show, which made it a natural fit for a terminal building, so the concept was built around a simple marketing story: a towering Piltover terminal had appeared, fully formed, in the middle of the department store."}, {"rows": [[{"src": "images/p1/02.png", "tag": "Front View"}], [{"src": "images/p1/03.png", "tag": "ISO View"}]], "caption": "Seen head-on, the booth was staged to read as a single image — deliberately recalling the closing shot of Season 1. Visitor flow starts at the central rocket photo zone, runs through event stations set between the columns, and passes a game zone tucked behind the central clock-tower structure; crossing a large bridge graphic printed on the floor then leads into the Riot Store, designed as a recreation of Jinx's hideout.", "imgSpacing": 28}, {"rows": [[{"src": "images/p1/04.jpg"}, {"src": "images/p1/05.jpg"}], [{"src": "images/p1/06.jpg"}, {"src": "images/p1/07.jpg"}], [{"src": "images/p1/08.jpg"}, {"src": "images/p1/09.jpg"}]], "caption": "Tied into out-of-home advertising around the Shinsegae terminal outside, the finished space was built to read as if a location from the game had physically appeared inside the building. Game-accurate details were worked into the space throughout, giving visitors things to notice and enjoy as they explored."}, {"rows": [[{"src": "images/p1/10.jpg"}, {"src": "images/p1/11.jpg"}]], "caption": "Fan Fest had a different brief from the department-store pop-up: beyond introducing the Arcane universe to a broad audience, the goal was to let players who already live inside the League of Legends universe gather and enjoy the event as a festival happening inside that world."}, {"rows": [[{"src": "images/p1/12.jpg"}], [{"src": "images/p1/13.jpg"}]], "caption": "Working inside one large warehouse venue meant finding a way to build a world players already knew within a fixed budget. Fixtures from the Shinsegae pop-up were reused and rebuilt at a smaller scale for Piltover, while Zaun was carried mostly through lighting over a handful of new fixtures — leaning on the raw character of the warehouse shell to reach a high-impact result on a modest budget."}, {"rows": [[{"src": "images/p1/14.jpg"}], [{"src": "images/p1/15.jpg"}]], "caption": "That thinking shaped the whole building: the ground floor became Zaun, the floor above became Piltover, and the stairwell between them was designed as a connecting gate — so visitors moved between the two districts the way players do in the games, living inside the festival rather than just watching it."}]}, "2": {"meta": [{"label": "Year", "value": "2025"}, {"label": "Location", "value": "Seongsu, Seoul"}, {"label": "Role", "value": "Space & stage concept, creative direction, 2D design, vendor production, on-site installation"}, {"label": "Contribution", "value": "90%"}], "overview": "In July 2025, Riot Games unveiled Teamfight Tactics Set 15, “K.O. Coliseum,” and marked the launch with a ten-day pop-up that took over all four floors of The Garbe in Seongsu — over 300 pyeong of space, among the largest activations the game has staged in Seoul. The brief was to carry Set 15's visual identity, saturated primary color and a knowingly goofy sense of humor, through an entire building: a facade reshaped into a coliseum, a portal gate at its center, and floor after floor of strategy-themed rooms built around the game's own trait system, culminating in a live Fight Arena and a weekend stage program.", "sections": [{"rows": [[{"src": "images/p2/01.png", "ar": 1.8307}, {"src": "images/p2/02.jpg", "ar": 1.7787}]], "caption": "Set 15 leans hard into a specific tone — intense primary colors and a deliberately goofy, slightly absurd sense of humor, Little Legends squaring off inside a boxing-ring coliseum. Turning that tone into a physical space started from the subtitle itself: K.O. Coliseum became the literal design brief, its shape, color, and edge of comic exaggeration carried through the building rather than applied afterward as a logo."}, {"rows": [[{"src": "images/p2/03.png", "tag": "Front"}], [{"src": "images/p2/04.png", "tag": "ISO"}]], "imgSpacing": 28, "caption": "The four-story building's facade was reworked to read as a coliseum in its own right, its structure segmented to match, with a large portal gate cut into the center — the anchor for a hands-on exhibit where visitors would collect pieces and battle inside the space, staying true to the project's earliest pitch. Behind that gate, the interior was organized floor by floor against the game's own world-campaign guide, with 2D graphic panels marking out a separate booth for each strategic archetype."}, {"rows": [[{"src": "images/p2/05.jpg"}], [{"src": "images/p2/06.jpg"}, {"src": "images/p2/07.jpg"}]], "caption": "Built out across all four floors of The Garbe — more than 300 pyeong in total — the finished building carried the coliseum concept onto the street itself: primary-color panelling, an oversized mascot figure guarding the entrance, and Riot Store signage worked directly into the facade so the space read as a destination before visitors ever stepped inside."}, {"rows": [[{"src": "images/p2/08.jpg"}, {"src": "images/p2/09.jpg"}], [{"src": "images/p2/12.jpg"}, {"src": "images/p2/14.jpg"}]], "caption": "As a strategy game, the first floor gave each way of playing its own room: a power-lifting gym for patient, high-value decks, a fast-paced arena built around tempo, and rooms styled around bolder, wide-reaching compositions. Each space was keyed to the 2D visual guide Riot's team had already set for Set 15, so a player could recognize their own approach the moment they stepped in and find their composition before heading further into the building."}, {"rows": [[{"src": "images/p2/10.jpg"}, {"src": "images/p2/13.jpg"}], [{"src": "images/p2/15.jpg"}], [{"src": "images/p2/16.jpg"}]], "caption": "The building's flow was designed to double as a lesson in the game itself, arriving on the second floor for the final duel — a fittingly dramatic run of rooms, from a molten arena to a Reward Zone built around a pair of thrones. That floor also hosted the store's stage program: a weekend Double Up match pairing pre-registered visitors with invited streamers in a cooperative, ranking-based format built around the coliseum concept. Online reach from the match itself was modest, but on-site participation and satisfaction ran high."}, {"rows": [[{"src": "images/p2/11.jpg"}], [{"src": "images/p2/18.jpg", "ar": 1.3333}, {"src": "images/p2/17.jpg", "ar": 0.75}]], "caption": "On the third floor, that same sense of chance turned into a lucky-draw moment — a giant chef mascot presiding over a lottery pot, with the surrounding walls marking out the different item categories a player might pull, before the flow carried them back down for the final duel on the floor below."}]}, "3": {"meta": [{"label": "Year", "value": "2025"}, {"label": "Location", "value": "Tokyo, Japan → Goyang, Korea"}, {"label": "Role", "value": "Concept planning, spatial & 2D design, CBT pre-registration creative, vendor production, on-site installation"}, {"label": "Contribution", "value": "70%"}], "overview": "In September 2025, NCSOFT brought VIC Game Studios’ anime action RPG LIMIT ZERO BREAKERS to Tokyo Game Show for its first public showing, shown together with Japan collaborator KADOKAWA, then followed three months later with a dedicated booth at AGF (Anime X Game Festival) in Korea — the game’s domestic debut. Rather than two unrelated builds, the two booths were planned as a continuous campaign: a bright, sky-themed dock at TGS built around a booth-length LED ceiling, then an anime-festival-styled ‘Erika House’ at AGF that carried the same sky mood into Acaia, the game’s starting village.", "sections": [{"rows": [[{"src": "images/p3/01.png", "ar": 1.1743}, {"src": "images/p3/02.jpg", "ar": 1.7693}]], "caption": "LIMIT ZERO BREAKERS is VIC Game Studios’ anime-style action RPG, published globally by NCSOFT. Across two very different show floors on opposite sides of the same launch push, the booth had to compress a whole world — Acaia and the breakers who leave it — into a single, unmissable presence."}, {"rows": [[{"src": "images/p3/03.jpg"}], [{"src": "images/p3/04.jpg", "ar": 0.75}, {"src": "images/p3/05.jpg", "ar": 1.3333}]], "caption": "The Tokyo Game Show booth sat on a heavy-traffic aisle in a hall of more than 100 exhibitors, and covering the floor with every game element, as first planned, risked disappearing into the crowd. Working from the image of an airship drifting through open sky, we ran a booth-length LED screen overhead as a giant floating dock — against the dim, subdued booths around it, a patch of bright open sky became the thing people noticed first. Underneath, a dock graphic and a large roulette wheel gave that pull somewhere to land: visitors drawn in by the screen could collect free goods and spin the wheel, turning a glance upward into real interest in the game itself."}, {"rows": [[{"src": "images/p3/06.jpg", "tag": "Elevation"}], [{"src": "images/p3/07.jpg", "tag": "ISO"}], [{"src": "images/p3/08.png", "tag": "Floor Plan"}]], "imgSpacing": 28, "caption": "For AGF in December, the booth was rebuilt from the ground up into a two-story village front — shown here in elevation, isometric view, and plan."}, {"rows": [[{"src": "images/p3/09.jpg"}], [{"src": "images/p3/10.jpg"}, {"src": "images/p3/11.jpg"}], [{"src": "images/p3/12.jpg"}]], "caption": "As the very next promotional stop after Tokyo, the AGF booth carried that sky mood into the language of an anime festival. The early concept was Erika House, home to the game’s lead heroine — an old-fashioned house built around the sky blue of the Tokyo booth and Erika’s signature pink, with her cute, still largely unrevealed design placed front and center to pull people toward pre-registration. The house shape held, but since this was LIMIT ZERO BREAKERS’ Korean debut, we pushed the design further into the game’s own world, reworking the space around Acaia, its starting village — keeping Acaia’s color and mood while adapting form and detail, since the game is still in development. Roof shapes, color and gradient, and the lighting’s color temperature were all set to read as one consistent village. Built across a 12-booth footprint, the structure was cut into ten faces to fit in as many interactive stops as possible: a large Erika out front drew people in, stops scattered through the space eased them into Acaia, and the path closed with guidance to register for the CBT — carrying visitors from curiosity into the world, and from the world into wanting to play."}, {"rows": [[{"src": "images/p3/13.jpg"}], [{"src": "images/p3/14.jpg"}], [{"src": "images/p3/15.jpg"}]], "caption": "Standing alongside the show’s larger booths, the overhead LED was angled toward the corridor and kept looping gameplay footage and sky visuals, so the game stayed in view of passersby throughout the show. Directly below it, a cosplay zone and a large Erika prize wheel picked up where the screen left off, carrying that captured attention straight into the space."}]}, "4": {"meta": [{"label": "Year", "value": "2026"}, {"label": "Location", "value": "Gangnam, Seoul"}, {"label": "Role", "value": "Concept planning, premiere-to-streaming promotional creative, spatial & 2D design, vendor production, on-site installation"}, {"label": "Contribution", "value": "40%"}], "overview": "Disney+’s Killers’ Shopping Mall returned for its second season on July 22, 2026, and the pop-up marking its premiere took over a full building at Gangnam-daero 420 in Seoul from July 10 to August 8 — Murthehelp, the show’s underground weapons shop, reopened as a walk-through experience for visitors 19 and older. Rather than a stage built only for the show’s existing fans, the concept turned the whole building — and the out-of-home ad space wrapped around it — into a piece of the story, staging Gangnam-daero itself as the block where the show’s killers do their shopping.", "sections": [{"rows": [[{"src": "images/p4/01.mp4", "poster": "images/p4/01-poster.jpg", "video": true, "ar": 1.7778, "srcWebm": "images/p4/01.webm"}], [{"src": "images/p4/02.jpg"}]], "caption": "Season 2 picks up where the show left off — Murthehelp, the underground weapons broker that closed at the end of Season 1, reopens in Gangnam. The pitch was to turn that reopening into a citywide event: rather than aim only at the show’s existing fandom, wrap the whole building in the story and turn everyone walking down Gangnam-daero that day into a potential killer walking back in — pairing a giant LED facade with the out-of-home ad slots already lining the street, so the block itself became one long killers’ alley. The idea was approved largely as pitched: a full building on Gangnam-daero was taken over for the run, its exterior built as one continuous shipping-container graphic — 40 meters wide, 30 meters tall — with a section torn open by gunfire and lit from within by LED, so the mall's interior appeared to spill out through the wound, and an oversized logo made sure the show’s identity was visible from anywhere on the street."}, {"rows": [[{"src": "images/p4/06.jpg"}], [{"src": "images/p4/04.jpg"}], [{"src": "images/p4/05.jpg"}]], "caption": "Inside, the space carried straight on from the street, staged in stages so visitors felt like they were entering somewhere secret. On the first floor, they shopped for weapons — and the one they picked decided which of the show’s killer organizations they were assigned to."}, {"rows": [[{"src": "images/p4/03.jpg"}, {"src": "images/p4/07.jpg"}], [{"src": "images/p4/08.jpg"}, {"src": "images/p4/09.jpg"}]], "caption": "From there, visitors carried that assignment upstairs to fight it out on the second floor. Staged this way, the space became a way to introduce each organization’s character and behavior from the show, and to walk newcomers through the Season 1 story before Season 2 picked it up."}]}};
+
+  function renderDetailBody(proj){
+    if (!proj){
+      detailBody.parentElement.classList.remove('has-case-content');
+      detailBody.innerHTML =
+        '<div class="panel-image" aria-hidden="true"></div>' +
+        '<p class="panel-body">Case study details — process, scope, and outcome — coming soon.</p>';
+      return;
+    }
+    detailBody.parentElement.classList.add('has-case-content');
+    var metaHtml = proj.meta.map(function(m){
+      return '<div class="case-meta-item"><div class="case-meta-label">' + m.label +
+        '</div><div class="case-meta-value">' + m.value + '</div></div>';
+    }).join('');
+    metaHtml = '<div class="case-meta-row">' + metaHtml + '</div>';
+    var sectionsHtml = proj.sections.map(function(s){
+      // each section is a list of rows, and each row is 1-2 images side by
+      // side — lets a section put one full-width image above a pair (the
+      // Nespresso plans: Mokdong on its own row, Jamsil+Gangnam sharing one)
+      // instead of forcing every image in a section into the same layout.
+      var rowsHtml = s.rows.map(function(row){
+        var rowClass = row.length > 1 ? ' case-img-row-multi' : '';
+        var imgsHtml = row.map(function(img){
+          var tagHtml = img.tag ? '<div class="case-img-tag">' + img.tag + '</div>' : '';
+          var growStyle = img.ar ? ' style="flex-grow:' + img.ar + '"' : '';
+          var videoStyle = img.video && img.ar ? ' style="aspect-ratio:' + img.ar + '"' : '';
+          var mediaHtml = img.video ?
+            '<video poster="' + img.poster + '" controls preload="metadata" playsinline' + videoStyle + '>' +
+              (img.srcWebm ? '<source src="' + img.srcWebm + '" type="video/webm">' : '') +
+              '<source src="' + img.src + '" type="video/mp4">' +
+            '</video>' :
+            '<img src="' + img.src + '" alt="" loading="lazy">';
+          return '<div class="case-img-wrap"' + growStyle + '>' + mediaHtml + tagHtml + '</div>';
+        }).join('');
+        return '<div class="case-img-row' + rowClass + '">' + imgsHtml + '</div>';
+      }).join('');
+      var imagesStyle = s.imgSpacing ? ' style="gap:' + s.imgSpacing + 'px;padding:' + s.imgSpacing + 'px 0"' : '';
+      return '<div class="case-section">' +
+        '<div class="case-section-images"' + imagesStyle + '>' + rowsHtml + '</div>' +
+        '<p class="case-section-caption">' + s.caption + '</p>' +
+        '</div>';
+    }).join('');
+    detailBody.innerHTML =
+      '<div class="case-meta">' + metaHtml + '</div>' +
+      '<div class="case-overview"><p>' + proj.overview + '</p></div>' +
+      '<div class="case-sections">' + sectionsHtml + '</div>';
+  }
+
+  // --- lightbox: tapping any case-study image (plan, render, or site
+  // photo) opens it full-screen with a quick scale/fade animation; tapping
+  // anywhere on the overlay closes it again, back to the case-study panel
+  // underneath (the detail panel itself is never touched by this).
+  function openLightbox(src){
+    if (!src) return;
+    lightboxImg.src = src;
+    lightboxEl.classList.add('show');
+    lightboxEl.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeLightbox(){
+    lightboxEl.classList.remove('show');
+    lightboxEl.setAttribute('aria-hidden', 'true');
+  }
+
+  // --- project detail: opens as an overlay on top of the list, one tap
+  // on a title, and closes back to the list rather than all the way home.
+  function openProjectDetail(li){
+    if (seq !== 'projects' || !li) return;
+    var idxSpan = li.querySelector('.idx');
+    var idxText = idxSpan ? idxSpan.textContent : '';
+    // build the title from a clone with the idx/year sub-elements stripped out,
+    // rather than string-replacing their text (a title that happens to contain
+    // the year itself, e.g. "TGS 2025, AGF 2025", would otherwise get mangled).
+    var clone = li.cloneNode(true);
+    var cIdx = clone.querySelector('.idx'); if (cIdx) cIdx.remove();
+    var cYear = clone.querySelector('.proj-year'); if (cYear) cYear.remove();
+    var titleText = clone.textContent.trim();
+    detailIdx.textContent = idxText;
+    detailTitle.textContent = titleText;
+    var dataIdx = li.getAttribute('data-idx');
+    renderDetailBody(PROJECTS[dataIdx]);
+    seq = 'detail';
+    // sized per the current layout so the panel always reaches past the
+    // wordmark's right edge, even as the word's width changes with screen size.
+    if (layout){
+      detailEl.style.width = layout.detailWidthPct + '%';
+    } else {
+      detailEl.style.width = '75%';
+    }
+    detailEl.classList.add('show');
+    detailEl.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeProjectDetail(){
+    if (seq !== 'detail') return;
+    detailEl.classList.remove('show');
+    detailEl.style.width = '0';
+    detailEl.setAttribute('aria-hidden', 'true');
+    seq = 'projects';
+  }
+
+  // --- about / contact: reached from inside the menu panel, alongside
+  // the project list, and closed back to that same panel.
+  function openAbout(){
+    if (seq !== 'projects') return;
+    seq = 'about';
+    aboutEl.classList.add('show');
+    aboutEl.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeAbout(){
+    if (seq !== 'about') return;
+    aboutEl.classList.remove('show');
+    aboutEl.setAttribute('aria-hidden', 'true');
+    seq = 'projects';
+  }
+
+  function openContact(){
+    if (seq !== 'projects') return;
+    seq = 'contact';
+    contactEl.classList.add('show');
+    contactEl.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeContact(){
+    if (seq !== 'contact') return;
+    contactEl.classList.remove('show');
+    contactEl.setAttribute('aria-hidden', 'true');
+    seq = 'projects';
+  }
+
+  function onHitClick(){
+    if (seq === 'home') beginRise();
+    else if (seq === 'topPause') beginFall();
+    else if (seq === 'bottom') resetToStart();
+  }
+
+  function onPowerClick(){
+    if (seq === 'bottom') openProjects();
+  }
+
+  function onProjectsClick(e){
+    // the project list is full-screen again, so while the detail panel is
+    // open (only 3/4 width), any click that reaches the list underneath
+    // must have landed on the remaining black strip — slide detail away.
+    if (seq === 'detail'){ closeProjectDetail(); return; }
+    if (seq !== 'projects') return;
+    var li = e.target && e.target.closest && e.target.closest('li');
+    if (li){ openProjectDetail(li); return; }
+    if (e.target && e.target.closest && e.target.closest('.menu-nav-link')) return; // handled by their own listeners
+    resetToStart();
+  }
+
+  function onDetailClick(e){
+    if (seq !== 'detail') return;
+    if (e.target && e.target.closest && e.target.closest('.panel-inner')) return;
+    closeProjectDetail();
+  }
+
+  function onAboutClick(e){
+    // no links or other interactive bits live inside About, so any tap
+    // anywhere on the screen (not just its outer margin) closes it again.
+    if (seq !== 'about') return;
+    closeAbout();
+  }
+
+  function onContactClick(e){
+    // same one-more-tap-anywhere-closes-it behavior, except taps actually
+    // land on the email/instagram/linkedin links themselves.
+    if (seq !== 'contact') return;
+    if (e.target && e.target.closest && e.target.closest('a')) return;
+    closeContact();
+  }
+
+  function frame(t){
+    var nowT = t || now();
+    var w = layout ? layout.w : window.innerWidth, h = layout ? layout.h : window.innerHeight;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    // the ripple's own clock only advances while it should be animating —
+    // it holds still during topPause and resumes seamlessly afterward.
+    if (lastFrameT === null) lastFrameT = nowT;
+    if (seq !== 'topPause') rippleClock += (nowT - lastFrameT);
+    lastFrameT = nowT;
+
+    // the trail's side glides independently of the rise/fall tween above —
+    // it can be mid-glide while the word itself is sitting still (e.g. the
+    // moment the power button is pressed).
+    if (sideAnimating){
+      var st = Math.min(1, (nowT - sideTween.startT) / sideTween.dur);
+      var se = easeInOutSine(st);
+      curSide = sideTween.from + (sideTween.to - sideTween.from) * se;
+      if (st >= 1){ curSide = sideTween.to; sideAnimating = false; }
+    }
+
+    if (seq === 'rising' || seq === 'falling' || seq === 'resetting' || seq === 'topSettle'){
+      var tt = Math.min(1, (nowT - tween.startT) / tween.dur);
+      var e = easeInOutSine(tt);
+      curY = tween.fromY + (tween.toY - tween.fromY) * e;
+      curTrail = tween.fromTrail + (tween.toTrail - tween.fromTrail) * e;
+      if (tt >= 1){
+        curY = tween.toY; curTrail = tween.toTrail;
+        if (seq === 'rising') arriveAtTop();
+        else if (seq === 'falling') arriveAtBottom();
+        else if (seq === 'topSettle') seq = 'topPause';
+        else seq = 'home';
+      }
+    }
+
+    var wantPower = seq === 'bottom' && (nowT - bottomArrivedAt) >= POWER_DELAY_MS;
+    var powerIsShown = powerBtn.classList.contains('show');
+    if (wantPower && !powerIsShown) powerBtn.classList.add('show');
+    else if (!wantPower && powerIsShown) powerBtn.classList.remove('show');
+
+    if (layout && levelCanvases.length){
+      var m = layout.margin;
+      var baseX = layout.boxLeft - m;
+      var baseY = layout.boxTop - m + curY;
+      var dw = layout.boxW + m * 2, dh = layout.boxH + m * 2;
+
+      if (curTrail > 0.001){
+        var passes = TRAIL_PASSES;
+        // spacing scales down as passes go up, so the trail keeps the same
+        // overall length/density feel — just subdivided more smoothly.
+        var trailStep = Math.max(6, layout.fontSize * 0.05) * (16 / TRAIL_PASSES);
+        var wavePhase = rippleClock * 0.0032;
+
+        for (var p = passes; p >= 1; p--){
+          var levelIdx = Math.min(NUM_LEVELS - 1, Math.floor((p - 1) / (passes / NUM_LEVELS)));
+          var rows = levelRows[levelIdx];
+          var passY = baseY + curSide * p * trailStep;
+          var amp = (p / passes) * layout.fontSize * 0.19;
+          var alpha = curTrail * 0.68 * Math.pow(1 - (p - 1) / passes, 1.3);
+          if (alpha < 0.01) continue;
+          ctx.globalAlpha = alpha;
+          for (var r = 0; r < rows.length; r++){
+            var row = rows[r];
+            var jitter = amp * (
+              0.55 * Math.sin(r * 0.85 + p * 0.5 + wavePhase) +
+              0.3 * Math.sin(r * 1.6 - p * 0.35 + wavePhase * 1.35) +
+              0.25 * Math.sin(r * 0.4 + p * 0.9 - wavePhase * 0.8)
+            );
+            ctx.drawImage(row.canvas, baseX + jitter, passY + row.top, dw, row.h);
+          }
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      ctx.drawImage(levelCanvases[0], baseX, baseY, dw, dh);
+    }
+
+    requestAnimationFrame(frame);
+  }
+
+  hit.addEventListener('click', onHitClick);
+  powerBtn.addEventListener('click', onPowerClick);
+  projectsEl.addEventListener('click', onProjectsClick);
+  detailEl.addEventListener('click', onDetailClick);
+  detailClose.addEventListener('click', closeProjectDetail);
+  aboutLink.addEventListener('click', openAbout);
+  aboutEl.addEventListener('click', onAboutClick);
+  aboutClose.addEventListener('click', closeAbout);
+  contactLink.addEventListener('click', openContact);
+  contactEl.addEventListener('click', onContactClick);
+  contactClose.addEventListener('click', closeContact);
+  detailBody.addEventListener('click', function(e){
+    var img = e.target && e.target.closest && e.target.closest('.case-img-wrap img');
+    if (!img) return;
+    e.stopPropagation();
+    openLightbox(img.getAttribute('src'));
+  });
+  lightboxEl.addEventListener('click', closeLightbox);
+
+  var resizeTimer;
+  window.addEventListener('resize', function(){
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function(){
+      build();
+      seq = 'home'; curY = 0; curTrail = 0; curSide = 1; sideAnimating = false;
+      rippleClock = 0; lastFrameT = null;
+      powerBtn.classList.remove('show');
+      projectsEl.classList.remove('show');
+      projectsEl.setAttribute('aria-hidden', 'true');
+      detailEl.classList.remove('show');
+      detailEl.style.width = '0';
+      detailEl.setAttribute('aria-hidden', 'true');
+      aboutEl.classList.remove('show');
+      aboutEl.setAttribute('aria-hidden', 'true');
+      contactEl.classList.remove('show');
+      contactEl.setAttribute('aria-hidden', 'true');
+    }, 150);
+  });
+
+  if (document.fonts && document.fonts.load){
+    document.fonts.load(FONT_WEIGHT + ' 100px Inter').then(build).catch(build);
+    document.fonts.ready.then(build);
+  } else {
+    build();
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
